@@ -1,0 +1,54 @@
+working code 
+import os
+from dotenv import load_dotenv
+from langchain_community.document_loaders import WebBaseLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.embeddings import OllamaEmbeddings
+from langchain.vectorstores import Chroma
+from langchain.chat_models import ChatOllama
+from langchain.chains import RetrievalQA
+
+# Load environment variables
+load_dotenv()
+
+def load_and_process_webpage(url):
+    print(f"Loading: {url}")
+    loader = WebBaseLoader(url)
+    docs = loader.load()
+
+    print("Splitting text...")
+    splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
+    split_docs = splitter.split_documents(docs)
+
+    print("Generating embeddings...")
+    embeddings = OllamaEmbeddings(model="llama3")
+
+    print("Storing in Chroma vector store...")
+    vectorstore = Chroma.from_documents(split_docs, embedding=embeddings, persist_directory="chroma_db")
+    vectorstore.persist()
+
+    return vectorstore
+
+def build_qa_chain(vectorstore):
+    print("Building QA chain...")
+    retriever = vectorstore.as_retriever(search_kwargs={"k": 5})
+    llm = ChatOllama(model="llama3")
+    qa_chain = RetrievalQA.from_chain_type(llm=llm, retriever=retriever)
+    return qa_chain
+
+def main():
+    url = input("Enter a non-JS rendered webpage URL: ").strip()
+    vectorstore = load_and_process_webpage(url)
+    qa_chain = build_qa_chain(vectorstore)
+
+    print("\nAsk questions about the web page (type 'exit' to quit):")
+    while True:
+        question = input("\nYour question: ").strip()
+        if question.lower() == "exit":
+            break
+        answer = qa_chain.run(question)
+        print("Answer:", answer)
+
+if __name__ == "__main__":
+    main()
+
